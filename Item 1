@@ -1,0 +1,87 @@
+% Item 1
+% 
+% Implementar un sistema en variables de estado que controle el ángulo del motor, para
+% consignas de pi/2 y –pi/2 cambiando cada 300 mili segundos y que el TL de 1,15 10-3 aparece sólo
+% para pi/2, para –pi/2 es nulo. Hallar el valor de integración Euler adecuado. El objetivo es mejorar
+% la dinámica del controlador que muestra la Fig. 1. 
+% LAA=366 10-6; J=5 10-9; RA=55,6; B=0; Ki=6,49 10-3; Km=6,53 10-3
+
+clc;clear all;close all
+
+% Definición de constantes
+Laa=366e-6; J=5e-9; Ra=55.6; Bm=0; Ki=6.49e-3; Km=6.53e-3;
+Tl=1.15e-3;
+t_etapa = 1e-5; tF = 0.6;
+t=0:t_etapa:tF-.5*tF*t_etapa;
+tiempo = round(tF/t_etapa);
+
+ent=(pi/2)*square(2*pi*t/0.2); %referencia
+fTl=(Tl/2)*square(2*pi*t/0.2)+Tl/2; %torque aplicado periodicamente
+ub=5*square(2*pi*t/0.6)+5; %accion de control de referencia
+
+% Definición de matrices
+% x1 = i, x2 = w, x3 = θ
+
+A=[-Ra/Laa -Km/Laa 0; Ki/J -Bm/J 0; 0 1 0];
+B=[1/Laa; 0; 0];
+C=[0 0 1];
+D=0;
+
+% Condidiones iniciales
+x0 = [0 0 0];
+
+% LQR
+Q=diag([1 1/10000 1/40]);    R=0.1;
+% Ganancia de realimentación
+K = lqr(A, B, Q, R);
+% Ganancia de referencia
+G=-inv(C*inv(A-B*K)*B);
+
+% Controlabilidad y observabilidad
+Co = ctrb(A, B);
+rank(Co); % = 3 por ende es controlable
+Ob = obsv(A,C);
+rank(Ob); % = 3 por ende es observable
+
+x=zeros(3,tiempo);
+x(1,1)=x0(1);
+x(2,1)=x0(2);
+x(3,1)=x0(3);
+u(1)=0;
+
+for i=2:1:tiempo
+    x_actual=[x(1,i-1); x(2,i-1); x(3,i-1)];
+    u_actual=-K*x_actual+ent(i-1)*G;
+    u_actual=-K*x_actual+10*(ent(i-1)-C*x_actual);
+    u=[u u_actual];
+    
+    x1_p=-Ra*x_actual(1)/Laa-Km*x_actual(2)/Laa+u_actual/Laa;
+    x2_p=Ki*x_actual(1)/J-Bm*x_actual(2)/J-fTl(i-1)/J;
+    x3_p=x_actual(2);
+    x_p_actual=[x1_p; x2_p; x3_p];
+    
+    x_sig=x_actual+t_etapa*x_p_actual;
+    x(1,i)=x_sig(1);
+    x(2,i)=x_sig(2);
+    x(3,i)=x_sig(3);
+end
+
+figure
+subplot(1,2,1)
+hold on;
+grid on;
+plot(t,x(3,:),'r');
+plot(t,ent,'k');
+legend({'Ángulo','Referencia'},'Location','southeast');
+title('θt');
+xlabel('Tiempo');
+ylabel('Ángulo');
+subplot(1,2,2)
+hold on;
+grid on;
+plot(t,u,'r');
+plot(t,ub,'k');
+legend({'Accion de control','Referencia'},'Location','southeast');
+title('ut')
+xlabel('Tiempo');
+ylabel('Accion de control');
