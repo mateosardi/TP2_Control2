@@ -1,0 +1,80 @@
+% Item 6
+% 
+% Incorporar un observador para el caso en que sólo pueda medirse el desplazamiento delta,
+% repetir las simulaciones para las condiciones anteriores y graficar los resultados en gráficas
+% superpuestas. 
+
+clc;clear all;close all
+
+% Declaración de constantes
+m = 0.1; Fricc = 0.1; long = 0.6; g = 9.8; M = 0.5;
+t_etapa = 1e-4; tF = 8;
+t=0:t_etapa:tF;
+tiempo = round(tF/t_etapa);
+
+ent=0*t + 10; %referencia
+
+% Matrices en el equilibrio inestable
+% x = [delta(i); delta_p(i); fi(i); fi_p(i)]
+A=[0 1 0 0;0 -Fricc/M -m*g/M 0; 0 0 0 1; 0 Fricc/(long*M) g*(m+M)/(long*M) 0];
+B=[0; 1/M; 0; -1/(long*M)];
+C=[1 0 0 0];
+D=0;
+
+% Condidiones iniciales
+x0 = [0 0 0 0];
+delta(1)=0;
+delta_p(1)=0;
+fi(1)=0;
+fi_p(1) = 0;
+u(1) = 0;
+
+% Diseño de LQR
+Q=diag([1 1 1 1]);    R=1;
+K = lqr(A,B,Q,R);
+
+% Controlabilidad y observabilidad
+Co = ctrb(A, B);
+rank(Co); % = 4 por ende es controlable
+Ob = obsv(A,C);
+rank(Ob); % = 4 por ende es observable
+
+%Calculo de parametros del observador
+Ao=A';
+Bo=C';
+Co=B';
+
+%Ganancia del observador
+Qo=diag([10 1000 10 100]); Ro=1;
+Ko=lqr(Ao,Bo,Qo,Ro)
+
+x_hat=[0;0;0;0]; %Inicializo el Observador
+fi_pp = 0;
+for i=1:1:tiempo
+x=[delta(i); delta_p(i); fi(i); fi_p(i)];
+
+u(i)=-K*x_hat(:,i);  %Con Observador
+
+% Ecuaciones diferenciales
+delta_pp = 1/(M+m) *(-m*long*fi_pp*cos(fi(i))+m*long*(fi_p(i))^2*sin(fi(i))+Fricc*delta_p(i)+u(i));
+fi_pp = (1/long)* (g*sin(fi(i))-delta_pp*cos(fi(i)));
+
+delta_p(i+1) = delta_p(i)+t_etapa*delta_pp;
+delta(i+1) = delta(i) + t_etapa*delta_p(i);
+fi_p(i+1) = fi_p(i) + t_etapa*fi_pp;
+fi(i+1) = fi(i) + t_etapa*fi_p(i);
+
+%________OBSERVADOR__________
+y_sal_O(i)=C*x_hat(:,i);
+y_sal(i)=C*x; 
+x_hatp=A*x_hat(:,i)+B*u(i)+Ko'*(y_sal(i)-y_sal_O(i));
+x_hat(:,i+1)=x_hat(:,i)+t_etapa*x_hatp;
+
+end
+
+figure
+hold on;
+grid on;
+% plot(t,delta,'r');
+plot(t,x_hat(4,:),'b');
+
